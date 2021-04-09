@@ -1,0 +1,439 @@
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+	  <script src="Cesium/Cesium.js"></script>
+
+  
+	</head>
+
+
+<style>
+     @import url(Cesium/Widgets/widgets.css);
+
+	 #video{
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      min-width: 100%;
+      min-height: 100%;
+      width: auto;
+      height: auto;
+      z-index: -100;
+      transform: translateX(-50%) translateY(-50%);
+      }
+
+	 #toolbar {
+        background: rgba(42, 42, 42, 0.8);
+        border-radius: 4px;
+      }
+
+      #toolbar input {
+        vertical-align: top;
+        
+      }
+
+      #toolbar table tr {
+        transform: translateY(0);
+        transition: transform 0.4s ease-out;
+      }
+
+      #toolbar table tr.up {
+    
+        transition: none;
+      }
+
+      #toolbar table tr.down {
+ 
+        transition: none;
+      }
+
+    
+
+    
+      </style>
+    <video id="video" muted="" autoplay="" loop="" ></video>  
+    <div id="cesiumContainer" class="fullSize"></div>
+    <div id="loadingOverlay"><h1>Loading...</h1></div>
+    <div id="toolbar">
+		<table>
+		  <tbody data-bind="foreach: layers">
+			<tr data-bind="css: { up: $parent.upLayer === $data, down: $parent.downLayer === $data }">
+			  <td><input type="checkbox" data-bind="checked: show"></td>
+			  <td>
+				<span data-bind="text: name, visible: !$parent.isSelectableLayer($data)"></span>
+				<select data-bind="visible: $parent.isSelectableLayer($data), options: $parent.baseLayers, optionsText: 'name', value: $parent.selectedLayer"></select>
+			  </td>
+			  <td>
+				<input type="range" min="0" max="1" step="0.01" data-bind="value: alpha, valueUpdate: 'input'">
+			  </td>
+			  <td>
+				<button type="button" class="cesium-button" data-bind="click: function() { $parent.raise($data, $index()); }, visible: $parent.canRaise($index())">
+				  ▲
+				</button>
+			  </td>
+			  <td>
+				<button type="button" class="cesium-button" data-bind="click: function() { $parent.lower($data, $index()); }, visible: $parent.canLower($index())">
+				  ▼
+				</button>
+			  </td>
+			</tr>
+		  </tbody>
+		</table>
+	  </div>
+    <script>
+ 
+var viewer = new Cesium.Viewer("cesiumContainer",{
+  
+  timeline:false,
+  animation:false,
+  fullscreenButton:false,
+  homeButton:false,
+  navigationHelpButton:false,
+  sceneModePicker:false,
+  Credit:false,
+    
+    contextOptions : {
+        webgl: {
+            alpha: true
+        }
+    }
+
+
+});
+    viewer.scene.skyBox.destroy();
+    viewer.scene.skyBox = undefined;
+    viewer.scene.sun.destroy();
+    viewer.scene.sun = undefined;
+	viewer.scene.moon.destroy();
+    viewer.scene.moon = undefined;
+    viewer.scene.skyAtmosphere.destroy();
+	viewer.scene.skyAtmosphere = undefined; 
+    viewer._cesiumWidget._creditContainer.parentNode.removeChild(
+    viewer._cesiumWidget._creditContainer);
+	viewer.scene.backgroundColor = Cesium.Color.TRANSPARENT;
+    var videoElement = document.getElementById("video");
+
+(function()
+{
+    
+   var video= document.getElementById('video'),
+    vendorurl=window.URL || window.webkitURL;
+
+   navigator.getMedia= navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+    navigator.getMedia(
+        {
+          video:true,
+          video:{facingMode: { exact: "environment" }},
+          audio:false
+        
+        }, function(stream){
+            video.srcObject = stream; video.play();
+ 
+        },function(error){
+
+        });
+    
+}) ();
+
+    var layers = viewer.scene.globe.imageryLayers;
+
+
+
+
+//layers ui
+
+
+var imageryLayers = viewer.imageryLayers;
+var viewModel = {
+  layers: [],
+  baseLayers: [],
+  upLayer: null,
+  downLayer: null,
+  selectedLayer: null,
+  isSelectableLayer: function (layer) {
+    return this.baseLayers.indexOf(layer) >= 0;
+  },
+  raise: function (layer, index) {
+    imageryLayers.raise(layer);
+    viewModel.upLayer = layer;
+    viewModel.downLayer = viewModel.layers[Math.max(0, index - 1)];
+    updateLayerList();
+    window.setTimeout(function () {
+      viewModel.upLayer = viewModel.downLayer = null;
+    }, 10);
+  },
+  lower: function (layer, index) {
+    imageryLayers.lower(layer);
+    viewModel.upLayer =
+      viewModel.layers[
+        Math.min(viewModel.layers.length - 1, index + 1)
+      ];
+    viewModel.downLayer = layer;
+    updateLayerList();
+    window.setTimeout(function () {
+      viewModel.upLayer = viewModel.downLayer = null;
+    }, 10);
+  },
+  canRaise: function (layerIndex) {
+    return layerIndex > 0;
+  },
+  canLower: function (layerIndex) {
+    return layerIndex >= 0 && layerIndex < imageryLayers.length - 1;
+  },
+};
+var baseLayers = viewModel.baseLayers;
+
+Cesium.knockout.track(viewModel);
+
+function setupLayers() {
+  
+   addAdditionalLayerOption(
+    "TN_Layer",
+    new Cesium.WebMapServiceImageryProvider({
+      url:
+        "https://bhuvan-vec2.nrsc.gov.in/bhuvan/wms",
+      layers: "lulc:TN_LULC50K_0506",
+      parameters: {
+        transparent: "true",
+        format: "image/png",
+      },
+    })
+  );
+  
+     addAdditionalLayerOption(
+    "USA_Layer",
+    new Cesium.WebMapServiceImageryProvider({
+      url:
+        "https://ahocevar.com/geoserver/wms",
+      layers: "topp:states",
+      parameters: {
+        transparent: "true",
+        format: "image/png",
+      },
+    })
+  );
+  
+ 
+}
+
+function addBaseLayerOption(name, imageryProvider) {
+  var layer;
+  if (typeof imageryProvider === "undefined") {
+    layer = imageryLayers.get(0);
+    viewModel.selectedLayer = layer;
+  } else {
+    layer = new Cesium.ImageryLayer(imageryProvider);
+  }
+
+  layer.name = name;
+  baseLayers.push(layer);
+}
+
+function addAdditionalLayerOption(name, imageryProvider, alpha, show) {
+  var layer = imageryLayers.addImageryProvider(imageryProvider);
+  layer.alpha = Cesium.defaultValue(alpha,1);
+  layer.show = Cesium.defaultValue(show, true);
+  layer.name = name;
+  Cesium.knockout.track(layer, ["alpha", "show", "name"]);
+}
+
+function updateLayerList() {
+  var numLayers = imageryLayers.length;
+  viewModel.layers.splice(0, viewModel.layers.length);
+  for (var i = numLayers - 1; i >= 0; --i) {
+    viewModel.layers.push(imageryLayers.get(i));
+  }
+}
+
+setupLayers();
+updateLayerList();
+
+var toolbar = document.getElementById("toolbar");
+Cesium.knockout.applyBindings(viewModel, toolbar);
+
+Cesium.knockout
+  .getObservable(viewModel, "selectedLayer")
+  .subscribe(function (baseLayer) {
+
+    var activeLayerIndex = 0;
+    var numLayers = viewModel.layers.length;
+    for (var i = 0; i < numLayers; ++i) {
+      if (viewModel.isSelectableLayer(viewModel.layers[i])) {
+        activeLayerIndex = i;
+        break;
+      }
+    }
+    var activeLayer = viewModel.layers[activeLayerIndex];
+    var show = activeLayer.show;
+    var alpha = activeLayer.alpha;
+    imageryLayers.remove(activeLayer, false);
+    imageryLayers.add(baseLayer, numLayers - activeLayerIndex - 1);
+    baseLayer.show = show;
+    baseLayer.alpha = alpha;
+    updateLayerList();
+  });
+//end
+
+
+
+
+
+
+
+
+
+
+var destination = new Cesium.Cartesian3();
+var currentScreenOrientation = window.orientation || 0;
+if (window.DeviceOrientationEvent) {
+	window.addEventListener('deviceorientation', onDeviceOrientationChanged, false);
+}
+window.addEventListener('orientationchange', function() {
+	currentScreenOrientation = window.orientation;
+}, false);
+
+var degtorad = Math.PI / 180; // Degree-to-Radian conversion
+
+function getBaseRotationMatrix( alpha, beta, gamma ) {
+	var _x = beta  ? beta  * degtorad : 0; 
+	var _y = gamma ? gamma * degtorad : 0; 
+	var _z = alpha ? alpha * degtorad : 0; 
+
+	var cX = Math.cos( _x );
+	var cY = Math.cos( _y );
+	var cZ = Math.cos( _z );
+	var sX = Math.sin( _x );
+	var sY = Math.sin( _y );
+	var sZ = Math.sin( _z );
+
+
+	var m11 = cZ * cY - sZ * sX * sY;
+	var m12 = - cX * sZ;
+	var m13 = cY * sZ * sX + cZ * sY;
+
+	var m21 = cY * sZ + cZ * sX * sY;
+	var m22 = cZ * cX;
+	var m23 = sZ * sY - cZ * cY * sX;
+
+	var m31 = - cX * sY;
+	var m32 = sX;
+	var m33 = cX * cY;
+
+	return [
+	m11,    m12,    m13,
+	m21,    m22,    m23,
+	m31,    m32,    m33
+	];
+}
+
+function getScreenTransformationMatrix( screenOrientation ) {
+	var orientationAngle = screenOrientation ? screenOrientation * degtorad : 0;
+
+	var cA = Math.cos( orientationAngle );
+	var sA = Math.sin( orientationAngle );
+
+	
+	var r_s = [
+	cA,    -sA,    0,
+	sA,    cA,     0,
+	0,     0,      1
+	];
+
+	return r_s;
+}
+
+
+function getWorldTransformationMatrix() {
+	var x = -90 * degtorad;
+
+	var cA = Math.cos( x );
+	var sA = Math.sin( x );
+
+	var r_w = [
+	1,     0,    0,
+	0,     cA,   -sA,
+	0,     sA,   cA
+	];
+
+	return r_w;
+}
+
+
+
+function matrixMultiply( a, b ) {
+	var final = [];
+
+	final[0] = a[0] * b[0] + a[1] * b[3] + a[2] * b[6];
+	final[1] = a[0] * b[1] + a[1] * b[4] + a[2] * b[7];
+	final[2] = a[0] * b[2] + a[1] * b[5] + a[2] * b[8];
+
+	final[3] = a[3] * b[0] + a[4] * b[3] + a[5] * b[6];
+	final[4] = a[3] * b[1] + a[4] * b[4] + a[5] * b[7];
+	final[5] = a[3] * b[2] + a[4] * b[5] + a[5] * b[8];
+
+	final[6] = a[6] * b[0] + a[7] * b[3] + a[8] * b[6];
+	final[7] = a[6] * b[1] + a[7] * b[4] + a[8] * b[7];
+	final[8] = a[6] * b[2] + a[7] * b[5] + a[8] * b[8];
+
+	return final;
+}
+
+
+function computeMatrix(alpha, beta, gamma, currentScreenOrientation) {
+	var rotationMatrix = getBaseRotationMatrix(
+	alpha,
+	beta,
+	gamma
+	); 
+	var screenTransform = getScreenTransformationMatrix( currentScreenOrientation ); 
+
+	var screenAdjustedMatrix = matrixMultiply( rotationMatrix, screenTransform ); 
+	var worldTransform = getWorldTransformationMatrix();
+
+	var finalMatrix = matrixMultiply( screenAdjustedMatrix, worldTransform );
+    
+	return finalMatrix; 
+}
+
+function getYawPitchRoll(rotationMatrix) {
+	var rm11 = rotationMatrix[0]; var rm12 = rotationMatrix[1]; var rm13 = rotationMatrix[2];
+	var rm21 = rotationMatrix[3]; var rm22 = rotationMatrix[4]; var rm23 = rotationMatrix[5];
+	var rm31 = rotationMatrix[6]; var rm32 = rotationMatrix[7]; var rm33 = rotationMatrix[8];
+	
+	var yaw = Math.atan2(rm21, rm11);
+	var pitch = Math.atan2(rm32, rm33);
+	var roll = Math.atan2(rm31, Math.sqrt(Math.pow(rm32,2) + Math.pow(rm33,2)));
+	
+	return [yaw, pitch, roll];
+}
+
+function onDeviceOrientationChanged(eventData) {
+	var beta = eventData.beta;
+	var gamma = eventData.gamma;
+	var alpha = eventData.alpha; 
+	
+	var matrix = computeMatrix(alpha, beta, gamma, currentScreenOrientation);
+	
+	
+	var YawPitchRoll = getYawPitchRoll(matrix);
+	
+	console.log(YawPitchRoll);
+	
+	viewer.camera.setView({
+    orientation : {
+       heading : -YawPitchRoll[0],
+        pitch : YawPitchRoll[1],
+		roll: -YawPitchRoll[2]
+    }
+   });
+	
+}
+
+
+
+
+
+</script>
+					
+</body> 
+</html>
